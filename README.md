@@ -1,36 +1,165 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# KVS WebRTC Backend Server
 
-## Getting Started
+A Next.js 14 backend server that handles AWS Kinesis Video Streams (KVS) WebRTC authentication and signing for mobile clients. This server keeps AWS credentials secure on the backend while allowing mobile apps to connect to KVS WebRTC streams.
 
-First, run the development server:
+## Features
 
+- Server-side AWS credential management
+- Signed URL generation for WebRTC connections
+- ICE server configuration retrieval
+- CORS enabled for mobile app development
+- REST API endpoints for mobile client integration
+
+## Setup
+
+1. Install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Configure AWS credentials in `.env.local`:
+```env
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_REGION=us-east-1
+KVS_CHANNEL_NAME=your_channel_name
+KVS_CHANNEL_ARN=your_channel_arn
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Run the development server:
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The server will be available at `http://localhost:3000`
 
-## Learn More
+## API Endpoints
 
-To learn more about Next.js, take a look at the following resources:
+### Initialize KVS Connection
+`POST /api/kvs/initialize`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Initialize a viewer connection to KVS with all necessary configuration.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+**Request Body:**
+```json
+{
+  "userId": "unique-user-id"
+}
+```
 
-## Deploy on Vercel
+**Response:**
+```json
+{
+  "signaling": {
+    "wssEndpoint": "wss://signed-url...",
+    "httpsEndpoint": "https://endpoint...",
+    "channelArn": "arn:aws:kinesisvideo...",
+    "clientId": "VIEWER-unique-user-id",
+    "region": "us-east-1"
+  },
+  "iceServers": [
+    {
+      "urls": "stun:stun.kinesisvideo.us-east-1.amazonaws.com:443"
+    },
+    {
+      "urls": "turn:endpoint...",
+      "username": "username",
+      "credential": "password"
+    }
+  ]
+}
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Sign URL
+`POST /api/kvs/sign-url`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Sign any KVS WebRTC URL with AWS credentials.
+
+**Request Body:**
+```json
+{
+  "endpoint": "wss://endpoint.kinesisvideo.us-east-1.amazonaws.com",
+  "queryParams": {
+    "X-Amz-ChannelARN": "channel-arn",
+    "X-Amz-ClientId": "client-id"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "signedUrl": "wss://signed-url-with-auth..."
+}
+```
+
+### Health Check
+`GET /api/health`
+
+Check server status and configuration.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "timestamp": "2024-01-01T00:00:00.000Z",
+  "environment": {
+    "hasAwsCredentials": true,
+    "region": "us-east-1",
+    "channelConfigured": true
+  }
+}
+```
+
+## Mobile Client Integration
+
+Your mobile app should:
+
+1. Call `/api/kvs/initialize` with a user ID to get the signed WebSocket URL and ICE servers
+2. Use the returned configuration to establish the WebRTC connection
+3. The signed URL already includes authentication - no need to expose AWS credentials
+
+Example mobile client code modification:
+```javascript
+// Instead of signing on the client:
+// const signedUrl = await requestSigner.getSignedURL(...)
+
+// Call your backend:
+const response = await fetch('http://localhost:3000/api/kvs/initialize', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ userId: user.id })
+});
+
+const config = await response.json();
+
+// Use the pre-signed configuration
+const signalingClient = new SignalingClient({
+  channelARN: config.signaling.channelArn,
+  channelEndpoint: config.signaling.wssEndpoint, // Already signed!
+  clientId: config.signaling.clientId,
+  role: Role.VIEWER,
+  region: config.signaling.region,
+  // No requestSigner needed - URL is pre-signed
+});
+
+// Use the ICE servers from the backend
+const peerConnection = new RTCPeerConnection({
+  iceServers: config.iceServers
+});
+```
+
+## Development Notes
+
+- CORS is enabled for all origins in development mode
+- For production, update CORS settings in `middleware.ts` to restrict origins
+- The server handles all AWS SDK operations, keeping credentials secure
+- Mobile clients receive pre-signed URLs that expire after a certain time
+
+## Security Considerations
+
+- Never expose AWS credentials to client applications
+- In production, implement proper authentication/authorization
+- Restrict CORS origins to your specific mobile app domains
+- Consider implementing rate limiting for API endpoints
+- Use HTTPS in production environments
