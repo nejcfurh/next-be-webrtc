@@ -20,14 +20,7 @@ export default function Home() {
                 Initialize KVS connection with signed URLs
               </p>
             </li>
-            <li>
-              <code className="bg-gray-200 px-2 py-1 rounded text-black">
-                POST /api/kvs/sign-url
-              </code>
-              <p className="text-sm text-gray-600 mt-1">
-                Sign a URL for KVS WebRTC
-              </p>
-            </li>
+
             <li>
               <code className="bg-gray-200 px-2 py-1 rounded text-black">
                 GET /api/health

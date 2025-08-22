@@ -13,11 +13,13 @@ A Next.js 14 backend server that handles AWS Kinesis Video Streams (KVS) WebRTC 
 ## Setup
 
 1. Install dependencies:
+
 ```bash
 npm install
 ```
 
 2. Configure AWS credentials in `.env.local`:
+
 ```env
 AWS_ACCESS_KEY_ID=your_aws_access_key_id
 AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
@@ -27,6 +29,7 @@ KVS_CHANNEL_ARN=your_channel_arn
 ```
 
 3. Run the development server:
+
 ```bash
 npm run dev
 ```
@@ -36,11 +39,13 @@ The server will be available at `http://localhost:3000`
 ## API Endpoints
 
 ### Initialize KVS Connection
+
 `POST /api/kvs/initialize`
 
 Initialize a viewer connection to KVS with all necessary configuration.
 
 **Request Body:**
+
 ```json
 {
   "userId": "unique-user-id"
@@ -48,6 +53,7 @@ Initialize a viewer connection to KVS with all necessary configuration.
 ```
 
 **Response:**
+
 ```json
 {
   "signaling": {
@@ -70,35 +76,14 @@ Initialize a viewer connection to KVS with all necessary configuration.
 }
 ```
 
-### Sign URL
-`POST /api/kvs/sign-url`
-
-Sign any KVS WebRTC URL with AWS credentials.
-
-**Request Body:**
-```json
-{
-  "endpoint": "wss://endpoint.kinesisvideo.us-east-1.amazonaws.com",
-  "queryParams": {
-    "X-Amz-ChannelARN": "channel-arn",
-    "X-Amz-ClientId": "client-id"
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "signedUrl": "wss://signed-url-with-auth..."
-}
-```
-
 ### Health Check
+
 `GET /api/health`
 
 Check server status and configuration.
 
 **Response:**
+
 ```json
 {
   "status": "ok",
@@ -120,6 +105,7 @@ Your mobile app should:
 3. The signed URL already includes authentication - no need to expose AWS credentials
 
 Example mobile client code modification:
+
 ```javascript
 // Instead of signing on the client:
 // const signedUrl = await requestSigner.getSignedURL(...)
@@ -128,7 +114,7 @@ Example mobile client code modification:
 const response = await fetch('http://localhost:3000/api/kvs/initialize', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ userId: user.id })
+  body: JSON.stringify({ userId: user.id }),
 });
 
 const config = await response.json();
@@ -145,7 +131,7 @@ const signalingClient = new SignalingClient({
 
 // Use the ICE servers from the backend
 const peerConnection = new RTCPeerConnection({
-  iceServers: config.iceServers
+  iceServers: config.iceServers,
 });
 ```
 
