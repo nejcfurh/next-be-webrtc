@@ -1,10 +1,3 @@
-export type ConnectionState = 
-  | 'disconnected'
-  | 'connecting'
-  | 'connected'
-  | 'failed'
-  | 'closed';
-
 export interface SignalingChannelEndpoints {
   WSS?: string;
   HTTPS?: string;
@@ -22,14 +15,4 @@ export interface KVSSignalingConfig {
   clientId: string;
   iceServers: IceServer[];
   region: string;
-}
-
-export interface SignedUrlResponse {
-  signedUrl: string;
-}
-
-export interface KVSCredentials {
-  accessKeyId: string;
-  secretAccessKey: string;
-  sessionToken?: string;
 }

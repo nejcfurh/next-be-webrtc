@@ -2,9 +2,9 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-24">
       <div className="max-w-2xl text-center">
-        <h1 className="text-4xl font-bold mb-4">KVS WebRTC Backend</h1>
+        <h1 className="text-4xl font-bold mb-4">NextJS BE for KVS WebRTC</h1>
         <p className="text-gray-600 mb-8">
-          Server-side signing for AWS Kinesis Video Streams WebRTC
+          Server-side signing for AWS Kinesis Video Streams WebRTC.
         </p>
 
         <div className="bg-gray-100 rounded-lg p-6 text-left">

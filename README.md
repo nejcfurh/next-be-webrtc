@@ -23,9 +23,7 @@ npm install
 ```env
 AWS_ACCESS_KEY_ID=your_aws_access_key_id
 AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
-AWS_REGION=us-east-1
-KVS_CHANNEL_NAME=your_channel_name
-KVS_CHANNEL_ARN=your_channel_arn
+AWS_REGION=your_aws_instance_region
 ```
 
 3. Run the development server:
@@ -40,7 +38,7 @@ The server will be available at `http://localhost:3000`
 
 ### Initialize KVS Connection
 
-`POST /api/kvs/initialize`
+`POST /api/kvs/initialize` on your mobile client.
 
 Initialize a viewer connection to KVS with all necessary configuration.
 
