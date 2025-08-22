@@ -104,18 +104,40 @@ export async function POST(request: NextRequest) {
     );
 
     const iceServers: Array<{
-      urls: string;
-      username?: string;
-      credential?: string;
-    }> = [{ urls: `stun:stun.kinesisvideo.${REGION}.amazonaws.com:443` }];
+      Uris?: string[];
+      Password?: string;
+      Ttl?: number;
+      Username?: string;
+    }> = [
+      {
+        Uris: [`stun:stun.kinesisvideo.${REGION}.amazonaws.com:443`],
+      },
+    ];
 
     iceResponse.IceServerList?.forEach(iceServer => {
-      if (iceServer.Uris?.[0]) {
-        iceServers.push({
-          urls: iceServer.Uris[0],
-          ...(iceServer.Username && { username: iceServer.Username }),
-          ...(iceServer.Password && { credential: iceServer.Password }),
-        });
+      if (iceServer.Uris && iceServer.Uris.length > 0) {
+        const server: {
+          Uris?: string[];
+          Password?: string;
+          Ttl?: number;
+          Username?: string;
+        } = {
+          Uris: iceServer.Uris,
+        };
+
+        if (iceServer.Password) {
+          server.Password = iceServer.Password;
+        }
+
+        if (iceServer.Ttl) {
+          server.Ttl = iceServer.Ttl;
+        }
+
+        if (iceServer.Username) {
+          server.Username = iceServer.Username;
+        }
+
+        iceServers.push(server);
       }
     });
 
@@ -149,23 +171,18 @@ export async function POST(request: NextRequest) {
       finalSignedUrl.substring(0, 100) + '...'
     );
 
-    // Return all necessary configuration to the mobile client
+    console.log({
+      iceServers,
+      channelEndpoint: finalSignedUrl,
+      channelARN: dynamicChannelArn,
+    });
+
+    // Return only the required data structure
     return NextResponse.json(
       {
+        iceServers,
         channelEndpoint: finalSignedUrl,
         channelARN: dynamicChannelArn,
-        channelArn: dynamicChannelArn,
-        clientId,
-        region: REGION,
-        httpsEndpoint: endpoints.HTTPS,
-        iceServers,
-        signaling: {
-          wssEndpoint: finalSignedUrl,
-          httpsEndpoint: endpoints.HTTPS,
-          channelArn: dynamicChannelArn,
-          clientId,
-          region: REGION,
-        },
       },
       {
         headers: {
