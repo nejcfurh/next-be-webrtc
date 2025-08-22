@@ -16,11 +16,9 @@ const CHANNEL_NAME = process.env.KVS_CHANNEL_NAME!;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    console.log('Received request body:', body);
     const { userId, channelName } = body;
 
     if (!userId) {
-      console.log('Missing userId in request body:', body);
       return NextResponse.json(
         { error: 'userId is required', receivedBody: body },
         { status: 400 }
@@ -59,8 +57,6 @@ export async function POST(request: NextRequest) {
     if (!dynamicChannelArn) {
       throw new Error(`Channel '${targetChannelName}' not found`);
     }
-
-    console.log('Found channel ARN:', dynamicChannelArn);
 
     // Step 2: Get signaling channel endpoints
     const endpointResponse = await kinesisVideoClient.send(
@@ -165,17 +161,6 @@ export async function POST(request: NextRequest) {
       endpoints.WSS,
       queryParams
     );
-
-    console.log(
-      'Generated signed URL:',
-      finalSignedUrl.substring(0, 100) + '...'
-    );
-
-    console.log({
-      iceServers,
-      channelEndpoint: finalSignedUrl,
-      channelARN: dynamicChannelArn,
-    });
 
     // Return only the required data structure
     return NextResponse.json(
