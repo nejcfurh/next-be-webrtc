@@ -16,7 +16,6 @@
     "@aws-sdk/signature-v4": "^3.370.0",
     "@aws-sdk/util-uri-escape": "^3.310.0",
     "amazon-kinesis-video-streams-webrtc": "^2.4.2",
-    "aws-sdk": "^2.1692.0",
     "cors": "^2.8.5",
     "next": "14.2.32",
     "react": "^18",

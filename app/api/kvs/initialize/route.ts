@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import AWS from 'aws-sdk';
+import {
+  KinesisVideoClient,
+  DescribeSignalingChannelCommand,
+  GetSignalingChannelEndpointCommand,
+} from '@aws-sdk/client-kinesis-video';
+import {
+  KinesisVideoSignalingClient,
+  GetIceServerConfigCommand,
+} from '@aws-sdk/client-kinesis-video-signaling';
 import { SigV4RequestSigner } from 'amazon-kinesis-video-streams-webrtc';
-
-// Configure AWS
-AWS.config.update({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  region: process.env.AWS_REGION || 'us-east-1',
-});
 
 const REGION = process.env.AWS_REGION || 'us-east-1';
 const CHANNEL_NAME = process.env.KVS_CHANNEL_NAME!;
@@ -39,17 +40,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 1: Get channel ARN by describing the signaling channel
-    const kinesisVideoClient = new AWS.KinesisVideo({
+    const kinesisVideoClient = new KinesisVideoClient({
       region: REGION,
-      correctClockSkew: true,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      },
     });
 
     // First, describe the signaling channel to get its ARN
-    const channelInfo = await kinesisVideoClient
-      .describeSignalingChannel({
+    const channelInfo = await kinesisVideoClient.send(
+      new DescribeSignalingChannelCommand({
         ChannelName: targetChannelName,
       })
-      .promise();
+    );
 
     const dynamicChannelArn = channelInfo.ChannelInfo?.ChannelARN;
     if (!dynamicChannelArn) {
@@ -59,15 +63,15 @@ export async function POST(request: NextRequest) {
     console.log('Found channel ARN:', dynamicChannelArn);
 
     // Step 2: Get signaling channel endpoints
-    const endpointResponse = await kinesisVideoClient
-      .getSignalingChannelEndpoint({
+    const endpointResponse = await kinesisVideoClient.send(
+      new GetSignalingChannelEndpointCommand({
         ChannelARN: dynamicChannelArn,
         SingleMasterChannelEndpointConfiguration: {
           Protocols: ['WSS', 'HTTPS'],
           Role: 'VIEWER',
         },
       })
-      .promise();
+    );
 
     const endpoints = endpointResponse.ResourceEndpointList?.reduce(
       (acc: Record<string, string>, endpoint) => {
@@ -84,25 +88,26 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 2: Get ICE servers
-    const kinesisVideoSignalingClient = new AWS.KinesisVideoSignalingChannels({
+    const kinesisVideoSignalingClient = new KinesisVideoSignalingClient({
       region: REGION,
       endpoint: endpoints.HTTPS,
-      correctClockSkew: true,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+      },
     });
 
-    const iceResponse = await kinesisVideoSignalingClient
-      .getIceServerConfig({
+    const iceResponse = await kinesisVideoSignalingClient.send(
+      new GetIceServerConfigCommand({
         ChannelARN: dynamicChannelArn,
       })
-      .promise();
+    );
 
     const iceServers: Array<{
       urls: string;
       username?: string;
       credential?: string;
-    }> = [
-      { urls: `stun:stun.kinesisvideo.${REGION}.amazonaws.com:443` },
-    ];
+    }> = [{ urls: `stun:stun.kinesisvideo.${REGION}.amazonaws.com:443` }];
 
     iceResponse.IceServerList?.forEach(iceServer => {
       if (iceServer.Uris?.[0]) {
@@ -171,7 +176,8 @@ export async function POST(request: NextRequest) {
       }
     );
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error';
     console.error('Failed to initialize KVS:', error);
     return NextResponse.json(
       { error: 'Failed to initialize KVS connection', details: errorMessage },

@@ -4,7 +4,7 @@ A Next.js 14 backend server that handles AWS Kinesis Video Streams (KVS) WebRTC 
 
 ## Features
 
-- Server-side AWS credential management
+- Server-side AWS SDK v3 credential management
 - Signed URL generation for WebRTC connections
 - ICE server configuration retrieval
 - CORS enabled for mobile app development

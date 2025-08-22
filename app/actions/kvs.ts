@@ -1,47 +1,47 @@
 'use server';
 
-import AWS from 'aws-sdk';
-import { SignatureV4 } from '@aws-sdk/signature-v4';
-import { Sha256 } from '@aws-crypto/sha256-js';
-import { HttpRequest } from '@aws-sdk/protocol-http';
-import { URL } from 'url';
-import type { 
-  KVSSignalingConfig, 
-  SignalingChannelEndpoints, 
-  IceServer 
+import {
+  KinesisVideoClient,
+  GetSignalingChannelEndpointCommand,
+} from '@aws-sdk/client-kinesis-video';
+import {
+  KinesisVideoSignalingClient,
+  GetIceServerConfigCommand,
+} from '@aws-sdk/client-kinesis-video-signaling';
+import { SigV4RequestSigner } from 'amazon-kinesis-video-streams-webrtc';
+import type {
+  KVSSignalingConfig,
+  SignalingChannelEndpoints,
+  IceServer,
 } from '@/types/kvs';
 
-// Configure AWS
-AWS.config.update({
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-  region: process.env.AWS_REGION || 'us-east-1',
-});
-
 const REGION = process.env.AWS_REGION || 'us-east-1';
-const CHANNEL_NAME = process.env.KVS_CHANNEL_NAME!;
 const CHANNEL_ARN = process.env.KVS_CHANNEL_ARN!;
 
 export async function getSignalingChannelEndpoints(): Promise<SignalingChannelEndpoints> {
-  const kinesisVideoClient = new AWS.KinesisVideo({
+  const kinesisVideoClient = new KinesisVideoClient({
     region: REGION,
-    correctClockSkew: true,
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    },
   });
 
-  const response = await kinesisVideoClient
-    .getSignalingChannelEndpoint({
+  const response = await kinesisVideoClient.send(
+    new GetSignalingChannelEndpointCommand({
       ChannelARN: CHANNEL_ARN,
       SingleMasterChannelEndpointConfiguration: {
         Protocols: ['WSS', 'HTTPS'],
         Role: 'VIEWER',
       },
     })
-    .promise();
+  );
 
   const endpoints = response.ResourceEndpointList?.reduce(
     (acc: SignalingChannelEndpoints, endpoint) => {
       if (endpoint.Protocol && endpoint.ResourceEndpoint) {
-        acc[endpoint.Protocol as keyof SignalingChannelEndpoints] = endpoint.ResourceEndpoint;
+        acc[endpoint.Protocol as keyof SignalingChannelEndpoints] =
+          endpoint.ResourceEndpoint;
       }
       return acc;
     },
@@ -55,21 +55,26 @@ export async function getSignalingChannelEndpoints(): Promise<SignalingChannelEn
   return endpoints;
 }
 
-export async function getIceServers(httpsEndpoint: string): Promise<IceServer[]> {
-  const kinesisVideoSignalingClient = new AWS.KinesisVideoSignalingChannels({
+export async function getIceServers(
+  httpsEndpoint: string
+): Promise<IceServer[]> {
+  const kinesisVideoSignalingClient = new KinesisVideoSignalingClient({
     region: REGION,
     endpoint: httpsEndpoint,
-    correctClockSkew: true,
+    credentials: {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    },
   });
 
-  const response = await kinesisVideoSignalingClient
-    .getIceServerConfig({
+  const response = await kinesisVideoSignalingClient.send(
+    new GetIceServerConfigCommand({
       ChannelARN: CHANNEL_ARN,
     })
-    .promise();
+  );
 
   const iceServers: IceServer[] = [
-    { urls: `stun:stun.kinesisvideo.${REGION}.amazonaws.com:443` }
+    { urls: `stun:stun.kinesisvideo.${REGION}.amazonaws.com:443` },
   ];
 
   response.IceServerList?.forEach(iceServer => {
@@ -89,59 +94,41 @@ export async function getSignedWebSocketUrl(
   wssEndpoint: string,
   clientId: string
 ): Promise<string> {
-  const credentials = {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+  const requestSigner = new SigV4RequestSigner(
+    REGION,
+    {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    },
+    'kinesisvideo'
+  );
+
+  // Create query parameters
+  const queryParams = {
+    'X-Amz-ChannelARN': CHANNEL_ARN,
+    'X-Amz-ClientId': clientId,
   };
 
-  const signer = new SignatureV4({
-    credentials,
-    region: REGION,
-    service: 'kinesisvideo',
-    sha256: Sha256,
-  });
-
-  const url = new URL(wssEndpoint);
-  
-  // Add query parameters
-  url.searchParams.set('X-Amz-ChannelARN', CHANNEL_ARN);
-  url.searchParams.set('X-Amz-ClientId', clientId);
-
-  const request = new HttpRequest({
-    method: 'GET',
-    protocol: url.protocol,
-    path: url.pathname,
-    query: Object.fromEntries(url.searchParams.entries()),
-    headers: {
-      host: url.hostname,
-    },
-    hostname: url.hostname,
-    port: url.port ? parseInt(url.port) : undefined,
-  });
-
-  const signedRequest = await signer.sign(request);
-  
-  // Construct the signed URL
-  const signedUrl = `${url.protocol}//${url.hostname}${url.pathname}?`;
-  const queryParams = new URLSearchParams(signedRequest.query as Record<string, string>);
-  
-  return signedUrl + queryParams.toString();
+  // Get signed URL using KVS WebRTC signer
+  return await requestSigner.getSignedURL(wssEndpoint, queryParams);
 }
 
-export async function initializeKVSViewer(userId: string): Promise<KVSSignalingConfig> {
+export async function initializeKVSViewer(
+  userId: string
+): Promise<KVSSignalingConfig> {
   try {
     // Get signaling channel endpoints
     const endpoints = await getSignalingChannelEndpoints();
-    
+
     // Get ICE servers configuration
     const iceServers = await getIceServers(endpoints.HTTPS!);
-    
+
     // Generate client ID
     const clientId = `VIEWER-${userId}-${Date.now()}`;
-    
+
     // Get signed WebSocket URL
     const signedWssUrl = await getSignedWebSocketUrl(endpoints.WSS!, clientId);
-    
+
     return {
       channelEndpoint: signedWssUrl,
       channelArn: CHANNEL_ARN,
